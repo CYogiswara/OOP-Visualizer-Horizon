@@ -1,6 +1,6 @@
 //EXTRACT INFORMATION CLASSES FROM INPUT
 
-import type { ClassInfo, ClassKind, PropertyInfo, TSNode, Visibility } from './types';
+import type { ClassInfo, ClassKind, MethodInfo, PropertyInfo, SupertypeRef, TSNode, Visibility } from './types';
 const child = (n: TSNode, type: string) =>
     n.children.find((c) => c.type === type)
 
@@ -30,9 +30,9 @@ export function extractClasses(root: TSNode, file: string, content: string): Cla
             endLine: endLine,
             code: code,
             kind: kindOf(node),
-            properties: constructorProperties(node),
-            methods: [],
-            supertypes: [],
+            properties: [...constructorProperties(node), ...bodyProperties(node)],
+            methods: bodyMethods(node),
+            supertypes: superTypesOf(node),
             mentionedNames: [],
             hasMain: false,
             outer: null
@@ -45,7 +45,7 @@ function kindOf(n: TSNode,): ClassKind {
     if (n.type === 'object_declaration') return 'object'
     if (n.children.some(c => c.type === 'interface')) return 'interface'
     const mods = child(n, 'modifiers')
-    const words = mods ? mods.children.map(c => c.text) : []
+    const words = modifierWords(n)
     if (words.includes('enum')) return 'enum'
     if (words.includes('data')) return 'data'
     if (words.includes('sealed')) return 'sealed'
@@ -93,4 +93,96 @@ function constructorProperties(classNode: TSNode): PropertyInfo[] {
         })
     }
     return props
+}
+
+function bodyProperties(classNode: TSNode): PropertyInfo[] {
+    const props: PropertyInfo[] = []
+    const body = child(classNode, 'class_body')
+
+    if(!body) return props
+
+    for(const p of body.children){
+        if(p.type !== 'property_declaration') continue
+        const decl = child(p, 'variable_declaration')
+        if(!decl) continue
+        const nameNode = child(decl, 'simple_identifier')
+        if(!nameNode) continue
+        const typeNode = child(decl, 'user_type') ?? child(decl, 'nullable_type')
+        const binding = child(p, 'binding_pattern_kind')
+
+        props.push({
+            name: nameNode.text,
+            type: typeNode ? typeNode.text : null,
+            mutable: binding ? binding.text === 'var' : false,
+            visibility: visibilityOf(modifierWords(p)),
+            fromConstructor: false,
+            isStatic: false,
+            typeRefs: [],
+            line: p.startPosition.row + 1,
+        })
+    }
+    return props
+}
+
+function bodyMethods(classNode: TSNode): MethodInfo[] {
+    const methods: MethodInfo[] = []
+    const body = child(classNode, 'class_body')
+    if (!body) return methods
+
+    for (const fn of body.children) {
+        if (fn.type !== 'function_declaration') continue
+
+        const nameNode = child(fn, 'simple_identifier')
+        if (!nameNode) continue
+
+        const words = modifierWords(fn)
+
+        // Parameters: (makanan: Makanan, porsi: Int)
+        const params: { name: string; type: string }[] = []
+        const paramList = child(fn, 'function_value_parameters')
+        if (paramList) {
+            for (const p of paramList.children) {
+                if (p.type !== 'parameter') continue
+                const pName = child(p, 'simple_identifier')
+                const pType = child(p, 'user_type') ?? child(p, 'nullable_type')
+                params.push({
+                    name: pName ? pName.text : '?',
+                    type: pType ? pType.text : '?',
+                })
+            }
+        }
+
+        const returnNode = child(fn, 'user_type') ?? child(fn, 'nullable_type')
+
+        methods.push({
+            name: nameNode.text,
+            visibility: visibilityOf(words),
+            isOverride: words.includes('override'),
+            isAbstract: words.includes('abstract'),
+            isOpen: words.includes('open'),
+            isStatic: false,
+            params,
+            returnType: returnNode ? returnNode.text : null,
+            line: fn.startPosition.row + 1,
+        })
+    }
+    return methods
+}
+
+function superTypesOf(classNode: TSNode): SupertypeRef[] {
+    const  supers: SupertypeRef[] = []
+
+    for(const d of classNode.children){
+        if(d.type !== 'delegation_specifier') continue
+        const inv = child(d, 'constructor_invocation')
+        const userType = inv ? child(inv, 'user_type') : child(d, 'user_type')
+        if(!userType) continue
+        const nameNode = child(userType, 'type_identifier')
+        if(!nameNode) continue
+        supers.push({
+            name: nameNode.text,
+            viaConstructor: Boolean(inv)
+        })
+    }
+    return supers
 }
