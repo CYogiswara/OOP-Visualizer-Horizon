@@ -33,7 +33,7 @@ export function extractClasses(root: TSNode, file: string, content: string): Cla
             properties: [...constructorProperties(node), ...bodyProperties(node)],
             methods: bodyMethods(node),
             supertypes: superTypesOf(node),
-            mentionedNames: [],
+            mentionedNames: mentionedNamesIn(node, nameNode.text),
             hasMain: false,
             outer: null
         })
@@ -44,7 +44,6 @@ export function extractClasses(root: TSNode, file: string, content: string): Cla
 function kindOf(n: TSNode,): ClassKind {
     if (n.type === 'object_declaration') return 'object'
     if (n.children.some(c => c.type === 'interface')) return 'interface'
-    const mods = child(n, 'modifiers')
     const words = modifierWords(n)
     if (words.includes('enum')) return 'enum'
     if (words.includes('data')) return 'data'
@@ -88,7 +87,7 @@ function constructorProperties(classNode: TSNode): PropertyInfo[] {
             visibility: visibilityOf(modifierWords(p)),
             fromConstructor: true,
             isStatic: false,
-            typeRefs: [],
+            typeRefs: typeNames(type),
             line: p.startPosition.row + 1,
         })
     }
@@ -117,7 +116,7 @@ function bodyProperties(classNode: TSNode): PropertyInfo[] {
             visibility: visibilityOf(modifierWords(p)),
             fromConstructor: false,
             isStatic: false,
-            typeRefs: [],
+            typeRefs: typeNames(typeNode),
             line: p.startPosition.row + 1,
         })
     }
@@ -185,4 +184,38 @@ function superTypesOf(classNode: TSNode): SupertypeRef[] {
         })
     }
     return supers
+}
+
+function typeNames(n: TSNode | undefined): string[]{
+    if(!n) return []
+    const out: string[] = []
+
+    const walk = (x: TSNode) => {
+        if(x.type === 'type_identifier'){
+            out.push(x.text)
+        }
+        for(const c of x.children){
+                walk(c)
+            }
+    }
+
+    walk(n)
+    return out
+}
+
+function mentionedNamesIn(classNode: TSNode, ownName: string): string[]{
+    const names = new Set<string>()
+
+    const walk = (x: TSNode) => {
+        if((x.type === 'type_identifier' || x.type === 'simple_identifier') && /^[A-Z]/.test(x.text)){
+        names.add(x.text)
+        }
+        for(const c of x.children){
+            walk(c)
+        }
+    }
+
+    walk(classNode)
+    names.delete(ownName)
+    return [...names]
 }

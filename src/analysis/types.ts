@@ -57,3 +57,13 @@ export interface ClassInfo {
   hasMain: boolean
   outer: string | null
 }
+
+export type EdgeKind = 'extends' | 'implements' | 'has' | 'uses'
+
+export interface GraphEdge{
+  id: string
+  from: string
+  to: string
+  kind: EdgeKind
+  via: String[]
+}
