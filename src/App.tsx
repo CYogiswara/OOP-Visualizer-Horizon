@@ -11,6 +11,8 @@ import { MarkerType } from '@xyflow/react'
 import type { EdgeKind } from './analysis/types'
 import { Background } from '@xyflow/react'
 import { SidePanel } from './components/SidePanel'
+import { Controls, Panel } from '@xyflow/react'
+import { EDGE_INFO } from './analysis/explain'
 
 const EDGE_STYLE: Record<EdgeKind, { color: string, dash?: string, width: number }> = {
   extends: { color: '#534AB7', width: 2 },
@@ -34,14 +36,18 @@ function App() {
   const [edges, setEdges] = useState<GraphEdge[]>([])
   const [runId, setRunId] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [visible, setVisible] = useState<Record<EdgeKind, boolean>>({
+    extends: true, implements: true, has: true, uses: true
+  })
 
   const positions = layoutClasses(classes, edges)
 
-  const connected = new Set<String>()
+  const connected = new Set<string>()
   const selected = classes.find((c) => c.id === selectedId) ?? null
   if (selectedId) {
     connected.add(selectedId)
     for (const e of edges) {
+      if (!visible[e.kind]) continue
       if (e.from === selectedId) connected.add(e.to)
       if (e.to === selectedId) connected.add(e.from)
     }
@@ -59,7 +65,7 @@ function App() {
     }
   }))
 
-  const flowEdges = edges.map((e) => {
+  const flowEdges = edges.filter((e) => visible[e.kind]).map((e) => {
     const inherit = e.kind === 'extends' || e.kind === 'implements'
     const st = EDGE_STYLE[e.kind]
     const active = selectedId !== null && (e.from === selectedId || e.to === selectedId)
@@ -108,19 +114,9 @@ function App() {
   }
 
   return (
-    // <>
-    //   <textarea value={code} onChange={(e) => setCode(e.target.value)} className='bg-gray-400' />
-    //   <button onClick={handleParse} className='bg-indigo-600 text-white px-4 py-2 rounded'>Parse</button>
-    //   <div style={{ height: 600, border: '1px solid #ccc' }}>
-    //     <ReactFlow nodes={flowNodes} edges={flowEdges} nodeTypes={nodeTypes} forceColorMode="light" fitView>
-    //       <Background gap={20} />
-    //     </ReactFlow>
-    //   </div>
-    // </>
-
     <div className='flex min-h-dvh flex-col bg-stone-50 lg:h-dvh'>
       {/* HEADER */}
-      <header className='flex flex wrap items-center gap-3 border-b border-stone-200 bg-white px-4 py-3'>
+      <header className='flex flex-wrap items-center gap-3 border-b border-stone-200 bg-white px-4 py-3'>
         <h1 className='mr-auto text-lg font-semibold'>OOP Visualizer</h1>
         <textarea
           value={code}
@@ -132,15 +128,38 @@ function App() {
       </header>
 
       {/* Graph + panels */}
-      <main className='flex flex-1 flex-col lg:min-h0 lg:flex-row'>
+      <main className='flex flex-1 flex-col lg:min-h-0 lg:flex-row'>
         <div className='h-[60vh] lg:h-auto lg:flex-1'>
           <ReactFlow key={runId} nodes={flowNodes} edges={flowEdges} nodeTypes={nodeTypes} forceColorMode="light" onNodeClick={(_, node) => setSelectedId(node.id)} onPaneClick={() => setSelectedId(null)} fitView>
-            <Background />
+            <Background gap={20}/>
+            <Controls showInteractive={false} />
+            <Panel position="top-left">
+              <div className="flex max-w-[calc(100vw-2rem)] flex-wrap gap-1 rounded-lg border border-stone-200 bg-white/95 p-1.5 text-xs shadow-sm">
+                {(Object.keys(EDGE_INFO) as EdgeKind[]).map((k) => {
+                  const st = EDGE_STYLE[k]
+                  const count = edges.filter((e) => e.kind === k).length
+                  return (
+                    <label
+                      key={k}
+                      title={EDGE_INFO[k].explain}
+                      className={`flex cursor-pointer select-none items-center gap-1.5 rounded px-1.5 py-0.5 hover:bg-stone-100 ${visible[k] ? '' : 'opacity-40'}`}
+                    >
+                      <input type="checkbox" checked={visible[k]} onChange={() => setVisible((v) => ({ ...v, [k]: !v[k] }))} />
+                      <svg width="28" height="8" aria-hidden="true">
+                        <line x1="0" y1="4" x2="28" y2="4" stroke={st.color} strokeWidth={st.width} strokeDasharray={st.dash} />
+                      </svg>
+                      {EDGE_INFO[k].label}
+                      <span className="text-stone-400">({count})</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </Panel>
           </ReactFlow>
         </div>
 
         <aside className="border-t border-stone-200 bg-white p-4 lg:w-[400px] lg:overflow-y-auto lg:border-l lg:border-t-0">
-           <SidePanel classes={classes} edges={edges} selected={selected} onSelect={setSelectedId} />
+          <SidePanel classes={classes} edges={edges} selected={selected} onSelect={setSelectedId} />
         </aside>
       </main>
     </div>
