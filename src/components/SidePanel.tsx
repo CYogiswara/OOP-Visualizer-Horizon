@@ -1,5 +1,6 @@
-import { EDGE_INFO, KIND_INFO, VISIBILITY_INFO, describeRelations, librarySupertypes } from '../analysis/Explain'
+import { EDGE_INFO, KIND_INFO, VISIBILITY_INFO, describeRelations, librarySupertypes } from '../analysis/explain'
 import type { ClassInfo, EdgeKind, GraphEdge } from '../analysis/types'
+import type { ReactNode } from 'react'
 
 interface Props {
   classes: ClassInfo[]
@@ -27,7 +28,7 @@ export function SidePanel({ classes, edges, selected, onSelect }: Props) {
     : <Overview classes={classes} edges={edges} />
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+function SectionTitle({ children }: { children: ReactNode }) {
   return <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-stone-500">{children}</h3>
 }
 
